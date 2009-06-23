@@ -35,6 +35,7 @@ public class ENUMList extends ListActivity implements ViewBinder, OnMenuItemClic
 	static private final String TYPE_PSTN	= "pstn";
 	static private final String TYPE_SIP	= "sip";
 	static private final String TYPE_SMS	= "sms";
+	static private final String TYPE_TEL    = "tel";
 	static private final String TYPE_VOICE	= "voice";
 	static private final String TYPE_WEB	= "web";
 	static private final String TYPE_XMPP	= "xmpp";
@@ -95,7 +96,7 @@ public class ENUMList extends ListActivity implements ViewBinder, OnMenuItemClic
 		/* set icon and strip URI prefix for known URI types */
 		int rid = android.R.drawable.ic_menu_help;
 		if (TYPE_PSTN.equals(type) || TYPE_SIP.equals(type)
-				|| TYPE_VOICE.equals(type)) {
+				|| TYPE_VOICE.equals(type) || TYPE_TEL.equals(type)) {
 			rid = android.R.drawable.ic_menu_call;
 		} else if (TYPE_WEB.equals(type)) {
 			rid = R.drawable.ic_menu_home;
@@ -129,7 +130,8 @@ public class ENUMList extends ListActivity implements ViewBinder, OnMenuItemClic
 		String action = Intent.ACTION_DEFAULT;
 
 		// Use non-default action for some URI schemes
-		if (TYPE_PSTN.equals(type) || TYPE_SIP.equals(type) || TYPE_VOICE.equals(type)) {
+		if (TYPE_PSTN.equals(type) || TYPE_SIP.equals(type) || TYPE_VOICE.equals(type) ||
+				TYPE_TEL.equals(type)) {
 			action = Intent.ACTION_CALL;
 		} else if (TYPE_SMS.equals(type)) {
 			action = Intent.ACTION_SENDTO;
