@@ -6,13 +6,13 @@
 	<application android:icon="@drawable/enumlogo"
 		android:label="@string/app_label" android:debuggable="false">
 		android:description="@string/app_description">
-		<activity android:name=".ENUMMain" android:label="@string/app_label">
+		<activity android:name=".ENUMMain" android:label="@string/app_label" android:noHistory="true">
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN" />
 				<category android:name="android.intent.category.LAUNCHER" />
 			</intent-filter>
 		</activity>
-		<activity android:name=".ENUMList" />
+		<activity android:name=".ENUMList" android:noHistory="true" />
 		<activity android:name=".ENUMPrefs" />
 		<receiver android:name=".ENUMReceiver" android:enabled="true">
 			<intent-filter android:priority="100">
