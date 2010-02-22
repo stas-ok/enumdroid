@@ -1,6 +1,7 @@
 package uk.nominet.DDDS;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,7 +15,9 @@ import org.xbill.DNS.Type;
 
 public abstract class DDDSinDNS extends DDDS {
 
-	public Rule[] lookupRules(String key) {
+	public List<Rule> lookupRules(String aus, String key) {
+
+		ArrayList<Rule> rules = new ArrayList<Rule>();
 
 		try {
 			Resolver resolver = new ExtendedResolver();
@@ -22,31 +25,56 @@ public abstract class DDDSinDNS extends DDDS {
 			Lookup lookup = new Lookup(key, Type.NAPTR);
 			lookup.setResolver(resolver);
 			Record[] records = lookup.run();
-			if (records == null) {
-				return null;
-			}
 
-			Rule[] rules = new Rule[records.length];
-			for (int i = 0; i < records.length; ++i) {
-				// type check necessary in case of other RRtypes in the Answer Section
-				if (records[i] instanceof NAPTRRecord) {
-					rules[i] = createRule(key, (NAPTRRecord)records[i]);
+			if (records != null) {
+				for (int i = 0; i < records.length; ++i) {
+					// type check necessary in case of other RRtypes in the
+					// Answer
+					// Section
+					if (records[i] instanceof NAPTRRecord) {
+						parseAndAddRule(aus, (NAPTRRecord) records[i], rules);
+					}
 				}
 			}
-
-			Arrays.sort(rules);
-
-			return rules;
 		} catch (Exception e) {
-			return null;
+			/* do nothing */
 		}
+		return rules;
 	}
 
-	protected abstract Rule createRule(String key, NAPTRRecord record);
+	/**
+	 * This method parses a {@link NAPTRRecord} and adds it to a list of rules
+	 */
+	protected abstract void parseAndAddRule(String aus, NAPTRRecord naptr, List<Rule> rules);
 
+	/**
+	 * dnsjava returns strings in presentation format, so real backslashes in
+	 * the input are doubled. This removes them.
+	 */
+	protected final static String unescape(String input) {
+		char[] c = input.toCharArray();
+		StringBuffer sb = new StringBuffer(input.length());
+		for (int i = 0; i < c.length; ++i) {
+			if (c[i] == '\\') {
+				// @todo - may fall off the end
+				i++;
+			}
+			sb.append(c[i]);
+		}
+		return sb.toString();
+	}
+
+	/**
+	 * DNSRule encapsulates the contents of a NAPTR record, as an abstract
+	 * implementation of the DDDS {@link Rule} interface.
+	 * 
+	 * Full implementation requires creation of a concrete subclass.
+	 * 
+	 * @see Rule
+	 */
 	public abstract class DNSRule implements Rule, Comparable<DNSRule> {
 
-		protected String key;
+		protected String aus;
 		protected int order;
 		protected int preference;
 		protected String flags;
@@ -54,19 +82,21 @@ public abstract class DDDSinDNS extends DDDS {
 		protected String regexp;
 		protected Name replacement;
 
+		/**
+		 * Compares the current DNSRule object to another one. The comparison
+		 * follows the standard DDDS rule, namely that rules are sorted first by
+		 * "order", and then by "priority".
+		 * 
+		 * @param r
+		 *            The rule to compare against
+		 * @return negative, zero, or positive value
+		 * @see java.lang.Comparable#compareTo(java.lang.Object)
+		 */
 		public int compareTo(DNSRule r) {
-			if (order < r.order) {
-				return -1;
-			} else if (order > r.order) {
-				return +1;
+			if (order != r.order) {
+				return (order - r.order);
 			} else {
-				if (preference < r.preference) {
-					return -1;
-				} else if (preference > r.preference) {
-					return +1;
-				} else {
-					return 0;
-				}
+				return (preference - r.preference);
 			}
 		}
 
@@ -86,36 +116,32 @@ public abstract class DDDSinDNS extends DDDS {
 			return service;
 		}
 
-		public DNSRule(String key, NAPTRRecord record) {
-			this.key = key;
-
-			order = record.getOrder();
-			preference = record.getPreference();
-			flags = unescape(record.getFlags());
-			service = unescape(record.getService());
-			regexp = unescape(record.getRegexp());
-			replacement = record.getReplacement();
+		public DNSRule(String aus, int order, int preference, String flags,
+				String service, String regexp, Name replacement) {
+			this.aus = aus;
+			this.preference = preference;
+			this.flags = flags;
+			this.service = service;
+			this.regexp = regexp;
+			this.replacement = replacement;
 		}
 
-		private String unescape(String input) {
-			char[] c = input.toCharArray();
-			StringBuffer sb = new StringBuffer();
-			for (int i = 0; i < c.length; ++i) {
-				if (c[i] == '\\') {
-					// @todo - may fall off the end
-					i++;
-				}
-				sb.append(c[i]);
-			}
-			return sb.toString();
+		public DNSRule(String aus, NAPTRRecord naptr) {
+			this.aus = aus;
+			order = naptr.getOrder();
+			preference = naptr.getPreference();
+			flags = unescape(naptr.getFlags());
+			service = unescape(naptr.getService());
+			regexp = unescape(naptr.getRegexp());
+			replacement = naptr.getReplacement();
 		}
 
-		public String getResult() {
+		public String evaluate() {
 
-			String find = null;
+			String search = null;
 			String replace = null;
 
-			if (regexp == null || regexp.length() <= 0) {
+			if (regexp == null || regexp.length() <= 0 || !isTerminal()) {
 				return replacement.toString();
 			}
 
@@ -125,15 +151,17 @@ public abstract class DDDSinDNS extends DDDS {
 			// @todo - more sanity checking
 			int i, j;
 			for (i = 1; i < c.length; i++) {
-				if (c[i] == '\\') continue;
+				if (c[i] == '\\')
+					continue;
 				if (c[i] == delim) {
-					find = regexp.substring(1, i++);
+					search = regexp.substring(1, i++);
 					break;
 				}
 			}
 
-			for (j = i ; j < c.length; ++j) {
-				if (c[j] == '\\') continue;
+			for (j = i; j < c.length; ++j) {
+				if (c[j] == '\\')
+					continue;
 				if (c[j] == delim) {
 					replace = regexp.substring(i, j);
 					break;
@@ -141,15 +169,16 @@ public abstract class DDDSinDNS extends DDDS {
 			}
 
 			// failed to parse - crap out here
-			if (find == null || replace == null) {
+			if (search == null || replace == null) {
 				return null;
 			}
 
-			// convert \digit to $digit
+			// convert \digit to $digit - Java regexps aren't the same
+			// as the same as NAPTR records
 			replace = replace.replaceAll("\\\\(\\d)", "\\$$1");
-			
+
 			// @todo - support case insensitive flag
-			Pattern p = Pattern.compile(find);
+			Pattern p = Pattern.compile(search);
 			Matcher m = p.matcher(aus);
 			if (m.matches()) {
 				return m.replaceFirst(replace);
@@ -159,9 +188,9 @@ public abstract class DDDSinDNS extends DDDS {
 		}
 
 		public String toString() {
-			return service + " " + getResult();
+			return service + " " + evaluate();
 		}
-		
+
 		public abstract boolean isTerminal();
 	}
 }

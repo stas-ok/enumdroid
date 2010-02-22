@@ -1,43 +1,73 @@
 package uk.nominet.DDDS;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+/**
+ * This is an abstract implementation of the Dynamic Delegation Discovery
+ * System (DDDS) as described in <a href="http://tools.ietf.org/html/rfc3401">RFC 3401</a>
+ * and <a href="http://tools.ietf.org/html/rfc3402">RFC 3402</a>.
+ * 
+ * @author Ray Bellis
+ * 
+ */
 public abstract class DDDS {
 
-	protected String aus = null;
+	protected abstract String convertKeyToAUS(String key);
+	protected abstract String convertAUSToDBKey(String key);
+	protected abstract List<Rule> lookupRules(String aus, String key);
 
-	protected abstract String convertToAUS(String key);
-	protected abstract String convertToDatabaseKey(String key);
-	protected abstract Rule[] lookupRules(String key);
-
-	/*
-	 * "Identity"
+	/**
+	 * Implements the DDDS "first well known rule"
+	 * 
+	 * The default first well known rule is an "identity" operation
+	 * 
+	 * @param key  the input value to the rule
+	 * @return     the result of the first well known rule
 	 */
-	protected String firstWellKnownRule(String key) {
+	protected String applyFirstWellKnownRule(String key) {
 		return key;
 	}
 
-	protected void doLookup(String key, List<Rule> rules) {
-		Rule[] aRules = lookupRules(key);
+	final private void internalLookup(String aus, String key, List<Rule> rules) {
 
+		/* lookup all rules matching the supplied AUS */
+		List<Rule> aRules = lookupRules(aus, key);
 		if (aRules == null) {
 			return;
 		}
 
+		/* and add them to the list */
 		for (Rule rule: aRules) {
 			if (rule.isTerminal()) {
 				rules.add(rule);
 			} else {
 				/* recurse if necessary */
-				doLookup(rule.getResult(), rules);
+				internalLookup(aus, rule.evaluate(), rules);
 			}
 		}
 	}
 
-	public void lookup(String input, List<Rule> rules) {
-		aus = convertToAUS(input);
-		String key = firstWellKnownRule(aus);
-		key = convertToDatabaseKey(key);
-		doLookup(key, rules);
+
+	/**
+	 * <p>Implements a DDDS lookup.</p>
+	 * 
+	 * @param input  the input key, in generic format
+	 * @return       a list of {@link Rule} objects 
+	 */
+	final public Rule[] lookup(String input) {
+		
+		String aus = convertKeyToAUS(input);
+		String key = applyFirstWellKnownRule(aus);
+		key = convertAUSToDBKey(key);
+		
+		ArrayList<Rule> rules = new ArrayList<Rule>();
+		internalLookup(aus, key, rules);
+		
+		Rule[] res = rules.toArray(new Rule[0]);
+		Arrays.sort(res);
+		
+		return res;
 	}
 }

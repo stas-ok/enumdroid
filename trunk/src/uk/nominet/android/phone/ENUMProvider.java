@@ -1,7 +1,5 @@
 package uk.nominet.android.phone;
 
-import java.util.ArrayList;
-
 import uk.nominet.DDDS.ENUM;
 import uk.nominet.DDDS.Rule;
 import android.content.ContentProvider;
@@ -67,16 +65,15 @@ public class ENUMProvider extends ContentProvider {
 		String[] services = rule.getService().toLowerCase().split("\\+");
 		
 		// check that resulting fields are valid
-		if (services.length < 2) return;	// not x+y
+		if (services.length != 2) return;	// not x+y
 		if (!services[0].equals("e2u")) return; // not E2U+...
 		
-		String result = rule.getResult();
-		
-		for (int i = 1; i < services.length; ++i) {
+		String result = rule.evaluate();
+		if (result != null) {
 			// record ID is just the current record count
 			Integer id = new Integer(c.getCount());
-			Object[] row = new Object[] { id, services[i], result };
-			Log.v(TAG, services[i] + " -> " + result);
+			Object[] row = new Object[] { id, services[1], result };
+			Log.v(TAG, services[1] + " -> " + result);
 			c.addRow(row);
 		}
 	}
@@ -89,9 +86,8 @@ public class ENUMProvider extends ContentProvider {
 		String suffix = getSuffix();
 		Log.v(TAG, "looking up " + number + " in " + suffix);
 
-		ArrayList<Rule>rules = new ArrayList<Rule>();
 		mENUM = new ENUM(suffix);
-    	mENUM.lookup(number, rules);
+    	Rule[] rules = mENUM.lookup(number);
     	
 		MatrixCursor c = new MatrixCursor(COLUMN_NAMES, 10);
 		for (Rule rule : rules) {
